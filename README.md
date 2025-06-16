@@ -94,6 +94,16 @@ python inference.py --eval_json_path ./datasets/dreambench_singleip.json
 python inference.py --eval_json_path ./datasets/dreambench_multiip.json
 ```
 
+### 🌀 Run with Replicate
+
+To deploy UNO with [Replicate](https://replicate.com/), install the `cog` CLI and push the model:
+
+```bash
+cog push r8.im/your-account/uno
+```
+
+See [the Replicate docs](https://replicate.com/docs/guides/push-a-model) for full instructions on authentication and usage.
+
 
 
 ### 🚄 Training

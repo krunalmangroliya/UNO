@@ -1,0 +1,6 @@
+build:
+  gpu: true
+  python_version: "3.10"
+  python_packages:
+    - -r requirements.txt
+predict: "predict.py:Predictor"
