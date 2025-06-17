@@ -16,6 +16,8 @@
 import os
 from dataclasses import dataclass
 
+CACHE_DIR = "/data/hf_cache"
+
 import torch
 import json
 import numpy as np
@@ -226,11 +228,13 @@ def print_load_warning(missing: list[str], unexpected: list[str]) -> None:
         print(f"Got {len(unexpected)} unexpected keys:\n\t" + "\n\t".join(unexpected))
 
 def load_from_repo_id(repo_id, checkpoint_name):
-    ckpt_path = hf_hub_download(repo_id, checkpoint_name)
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    ckpt_path = hf_hub_download(repo_id, checkpoint_name, cache_dir=CACHE_DIR)
     sd = load_sft(ckpt_path, device='cpu')
     return sd
 
 def load_flow_model(name: str, device: str | torch.device = "cuda", hf_download: bool = True):
+    os.makedirs(CACHE_DIR, exist_ok=True)
     # Loading Flux
     print("Init model")
     ckpt_path = configs[name].ckpt_path
@@ -240,7 +244,7 @@ def load_flow_model(name: str, device: str | torch.device = "cuda", hf_download:
         and configs[name].repo_flow is not None
         and hf_download
     ):
-        ckpt_path = hf_hub_download(configs[name].repo_id, configs[name].repo_flow)
+        ckpt_path = hf_hub_download(configs[name].repo_id, configs[name].repo_flow, cache_dir=CACHE_DIR)
     
     with torch.device("meta" if ckpt_path is not None else device):
         model = Flux(configs[name].params).to(torch.bfloat16)
@@ -260,6 +264,7 @@ def load_flow_model_only_lora(
     lora_rank: int = 16,
     use_fp8: bool = False
 ):
+    os.makedirs(CACHE_DIR, exist_ok=True)
     # Loading Flux
     print("Init model")
     ckpt_path = configs[name].ckpt_path
@@ -269,11 +274,11 @@ def load_flow_model_only_lora(
         and configs[name].repo_flow is not None
         and hf_download
     ):
-        ckpt_path = hf_hub_download(configs[name].repo_id, configs[name].repo_flow.replace("sft", "safetensors"))
+        ckpt_path = hf_hub_download(configs[name].repo_id, configs[name].repo_flow.replace("sft", "safetensors"), cache_dir=CACHE_DIR)
     
     if hf_download:
         try:
-            lora_ckpt_path = hf_hub_download("bytedance-research/UNO", "dit_lora.safetensors")
+            lora_ckpt_path = hf_hub_download("bytedance-research/UNO", "dit_lora.safetensors", cache_dir=CACHE_DIR)
         except:
             lora_ckpt_path = os.environ.get("LORA", None)
     else:
@@ -390,6 +395,7 @@ def load_clip(device: str | torch.device = "cuda") -> HFEmbedder:
 
 
 def load_ae(name: str, device: str | torch.device = "cuda", hf_download: bool = True) -> AutoEncoder:
+    os.makedirs(CACHE_DIR, exist_ok=True)
     ckpt_path = configs[name].ae_path
     if (
         ckpt_path is None
@@ -397,7 +403,7 @@ def load_ae(name: str, device: str | torch.device = "cuda", hf_download: bool = 
         and configs[name].repo_ae is not None
         and hf_download
     ):
-        ckpt_path = hf_hub_download(configs[name].repo_id_ae, configs[name].repo_ae)
+        ckpt_path = hf_hub_download(configs[name].repo_id_ae, configs[name].repo_ae, cache_dir=CACHE_DIR)
 
     # Loading the autoencoder
     print("Init AE")
