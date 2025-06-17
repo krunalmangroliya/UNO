@@ -17,6 +17,7 @@ import os
 from dataclasses import dataclass
 
 CACHE_DIR = "/data/hf_cache"
+PREBUNDLED_WEIGHTS_DIR = "/opt/weights/"
 
 import torch
 import json
@@ -234,23 +235,33 @@ def load_from_repo_id(repo_id, checkpoint_name):
     return sd
 
 def load_flow_model(name: str, device: str | torch.device = "cuda", hf_download: bool = True):
-    os.makedirs(CACHE_DIR, exist_ok=True)
     # Loading Flux
     print("Init model")
-    ckpt_path = configs[name].ckpt_path
-    if (
-        ckpt_path is None
-        and configs[name].repo_id is not None
-        and configs[name].repo_flow is not None
-        and hf_download
-    ):
-        ckpt_path = hf_hub_download(configs[name].repo_id, configs[name].repo_flow, cache_dir=CACHE_DIR)
     
+    model_filename = configs[name].repo_flow
+    prebundled_path = os.path.join(PREBUNDLED_WEIGHTS_DIR, model_filename)
+
+    ckpt_path = configs[name].ckpt_path # Check env var first
+
+    if os.path.exists(prebundled_path):
+        ckpt_path = prebundled_path
+        print(f"Loading pre-bundled flow model from: {ckpt_path}")
+    elif ckpt_path is not None:
+        print(f"Using flow model from FLUX_... env var: {ckpt_path}")
+    elif configs[name].repo_id is not None and model_filename is not None and hf_download:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        print(f"Downloading flow model {model_filename} from repo {configs[name].repo_id}")
+        ckpt_path = hf_hub_download(configs[name].repo_id, model_filename, cache_dir=CACHE_DIR)
+        print(f"Downloaded flow model to: {ckpt_path}")
+    else:
+        # This case should ideally not be reached if configs are set up correctly
+        print(f"Could not determine path for flow model {name}. ckpt_path is None and prebundled/HF download options exhausted.")
+
     with torch.device("meta" if ckpt_path is not None else device):
         model = Flux(configs[name].params).to(torch.bfloat16)
 
     if ckpt_path is not None:
-        print("Loading checkpoint")
+        print(f"Loading flow model checkpoint from {ckpt_path}")
         # load_sft doesn't support torch.device
         sd = load_model(ckpt_path, device=str(device))
         missing, unexpected = model.load_state_dict(sd, strict=False, assign=True)
@@ -264,38 +275,72 @@ def load_flow_model_only_lora(
     lora_rank: int = 16,
     use_fp8: bool = False
 ):
-    os.makedirs(CACHE_DIR, exist_ok=True)
     # Loading Flux
     print("Init model")
-    ckpt_path = configs[name].ckpt_path
-    if (
-        ckpt_path is None
-        and configs[name].repo_id is not None
-        and configs[name].repo_flow is not None
-        and hf_download
-    ):
-        ckpt_path = hf_hub_download(configs[name].repo_id, configs[name].repo_flow.replace("sft", "safetensors"), cache_dir=CACHE_DIR)
+
+    # Main model checkpoint loading logic
+    model_filename = configs[name].repo_flow.replace("sft", "safetensors") # Ensure .safetensors for this specific model
+    prebundled_model_path = os.path.join(PREBUNDLED_WEIGHTS_DIR, model_filename)
     
-    if hf_download:
+    ckpt_path = configs[name].ckpt_path # Check env var first
+
+    if os.path.exists(prebundled_model_path):
+        ckpt_path = prebundled_model_path
+        print(f"Loading pre-bundled main model from: {ckpt_path}")
+    elif ckpt_path is not None:
+        print(f"Using main model from FLUX_... env var: {ckpt_path}")
+    elif configs[name].repo_id is not None and model_filename is not None and hf_download:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        print(f"Downloading main model {model_filename} from repo {configs[name].repo_id}")
+        ckpt_path = hf_hub_download(configs[name].repo_id, model_filename, cache_dir=CACHE_DIR)
+        print(f"Downloaded main model to: {ckpt_path}")
+    else:
+        print(f"Could not determine path for main model {name}. ckpt_path is None and prebundled/HF download options exhausted.")
+
+    # LoRA model checkpoint loading logic
+    lora_model_filename = "dit_lora.safetensors"
+    prebundled_lora_path = os.path.join(PREBUNDLED_WEIGHTS_DIR, lora_model_filename)
+    lora_ckpt_path = None
+
+    if os.path.exists(prebundled_lora_path):
+        lora_ckpt_path = prebundled_lora_path
+        print(f"Loading pre-bundled LoRA model from: {lora_ckpt_path}")
+    elif hf_download:
         try:
-            lora_ckpt_path = hf_hub_download("bytedance-research/UNO", "dit_lora.safetensors", cache_dir=CACHE_DIR)
-        except:
+            os.makedirs(CACHE_DIR, exist_ok=True)
+            print(f"Downloading LoRA model {lora_model_filename} from bytedance-research/UNO")
+            lora_ckpt_path = hf_hub_download("bytedance-research/UNO", lora_model_filename, cache_dir=CACHE_DIR)
+            print(f"Downloaded LoRA model to: {lora_ckpt_path}")
+        except Exception as e:
+            print(f"Failed to download LoRA from hf_hub_download: {e}")
             lora_ckpt_path = os.environ.get("LORA", None)
+            if lora_ckpt_path:
+                print(f"Using LoRA model from LORA env var: {lora_ckpt_path}")
+            else:
+                print("LoRA model not found in env var LORA after download failure.")
     else:
         lora_ckpt_path = os.environ.get("LORA", None)
+        if lora_ckpt_path:
+            print(f"Using LoRA model from LORA env var (hf_download=False): {lora_ckpt_path}")
+        else:
+            print("LoRA model not found in env var LORA (hf_download=False).")
 
     with torch.device("meta" if ckpt_path is not None else device):
         model = Flux(configs[name].params)
 
-
     model = set_lora(model, lora_rank, device="meta" if lora_ckpt_path is not None else device)
 
-    if ckpt_path is not None:
-        print("Loading lora")
-        lora_sd = load_sft(lora_ckpt_path, device=str(device)) if lora_ckpt_path.endswith("safetensors")\
-            else torch.load(lora_ckpt_path, map_location='cpu')
+    if ckpt_path is not None: # Main model checkpoint
+        if lora_ckpt_path is not None:
+             print(f"Loading LoRA checkpoint from {lora_ckpt_path}")
+        else:
+            print("No LoRA checkpoint path available to load.")
+        lora_sd = {}
+        if lora_ckpt_path: # Only load if path exists
+            lora_sd = load_sft(lora_ckpt_path, device=str(device)) if lora_ckpt_path.endswith("safetensors") \
+                else torch.load(lora_ckpt_path, map_location='cpu')
         
-        print("Loading main checkpoint")
+        print(f"Loading main model checkpoint from {ckpt_path}")
         # load_sft doesn't support torch.device
 
         if ckpt_path.endswith('safetensors'):
@@ -395,22 +440,32 @@ def load_clip(device: str | torch.device = "cuda") -> HFEmbedder:
 
 
 def load_ae(name: str, device: str | torch.device = "cuda", hf_download: bool = True) -> AutoEncoder:
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    ckpt_path = configs[name].ae_path
-    if (
-        ckpt_path is None
-        and configs[name].repo_id is not None
-        and configs[name].repo_ae is not None
-        and hf_download
-    ):
-        ckpt_path = hf_hub_download(configs[name].repo_id_ae, configs[name].repo_ae, cache_dir=CACHE_DIR)
-
     # Loading the autoencoder
     print("Init AE")
+
+    ae_filename = configs[name].repo_ae
+    prebundled_path = os.path.join(PREBUNDLED_WEIGHTS_DIR, ae_filename)
+
+    ckpt_path = configs[name].ae_path # Check env var first
+
+    if os.path.exists(prebundled_path):
+        ckpt_path = prebundled_path
+        print(f"Loading pre-bundled AE model from: {ckpt_path}")
+    elif ckpt_path is not None:
+        print(f"Using AE model from AE env var: {ckpt_path}")
+    elif configs[name].repo_id_ae is not None and ae_filename is not None and hf_download:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        print(f"Downloading AE model {ae_filename} from repo {configs[name].repo_id_ae}")
+        ckpt_path = hf_hub_download(configs[name].repo_id_ae, ae_filename, cache_dir=CACHE_DIR)
+        print(f"Downloaded AE model to: {ckpt_path}")
+    else:
+        print(f"Could not determine path for AE model {name}. ckpt_path is None and prebundled/HF download options exhausted.")
+
     with torch.device("meta" if ckpt_path is not None else device):
         ae = AutoEncoder(configs[name].ae_params)
 
     if ckpt_path is not None:
+        print(f"Loading AE checkpoint from {ckpt_path}")
         sd = load_sft(ckpt_path, device=str(device))
         missing, unexpected = ae.load_state_dict(sd, strict=False, assign=True)
         print_load_warning(missing, unexpected)
