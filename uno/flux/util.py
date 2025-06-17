@@ -114,8 +114,8 @@ class ModelSpec:
 
 configs = {
     "flux-dev": ModelSpec(
-        repo_id="black-forest-labs/FLUX.1-dev",
-        repo_id_ae="black-forest-labs/FLUX.1-dev",
+        repo_id="camenduru/FLUX.1-dev",
+        repo_id_ae="camenduru/FLUX.1-dev",
         repo_flow="flux1-dev.safetensors",
         repo_ae="ae.safetensors",
         ckpt_path=os.getenv("FLUX_DEV"),
@@ -147,8 +147,8 @@ configs = {
         ),
     ),
     "flux-dev-fp8": ModelSpec(
-        repo_id="black-forest-labs/FLUX.1-dev",
-        repo_id_ae="black-forest-labs/FLUX.1-dev",
+        repo_id="camenduru/FLUX.1-dev",
+        repo_id_ae="camenduru/FLUX.1-dev",
         repo_flow="flux1-dev.safetensors",
         repo_ae="ae.safetensors",
         ckpt_path=os.getenv("FLUX_DEV_FP8"),
@@ -180,8 +180,8 @@ configs = {
         ),
     ),
     "flux-schnell": ModelSpec(
-        repo_id="black-forest-labs/FLUX.1-schnell",
-        repo_id_ae="black-forest-labs/FLUX.1-dev",
+        repo_id="camenduru/FLUX.1-schnell",
+        repo_id_ae="camenduru/FLUX.1-dev",
         repo_flow="flux1-schnell.safetensors",
         repo_ae="ae.safetensors",
         ckpt_path=os.getenv("FLUX_SCHNELL"),
